@@ -1,0 +1,16 @@
+WORK IN PROGRESS
+
+This plugin is part of: https://github.com/CESNET/ipfixcol2
+
+Right now, when you use IPFIXcol2 with the json output plugin, every field of every IPFIX message will be
+parsed into the json output. Sometimes you want parse only some of the fields located in IPFIX massages
+(for example: you are only interested in Src/Dst ip adresses). This plugin aims to resolve this issue.
+
+Goals:
+	-Reduce the parsed output to those fields which the user selects
+	-Integration of alliases (for example: instead of the field "iana:sourceIPv4Address" which is pretty 
+	non readable you can specify this fields as "ipsrc")
+	-The previous example brings up a problem when your traffic consists of IPv4 and IPv6 packets. Which 
+	one to select ? Auto detection of used IP protocol will be used in this instance, and the output will
+	be formated accordingly (for example: if you specify the field "ipsrc" then packets containing IPv4 will
+	be parsed into "ipsrc":"x.x.x.x" and packets containing IPv6 will be parse into "ipsrc":"x:x:x:x:x:x:x:x") 
