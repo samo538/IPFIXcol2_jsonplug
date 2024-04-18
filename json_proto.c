@@ -4,6 +4,7 @@
 #include <libfds/iemgr.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 //
 
 #define BUFF_SIZE 64
@@ -40,8 +41,14 @@ struct instance{
 	size_t elm_inst_arr_size;
 };
 
+struct str_arr{
+	char **matched;
+	size_t matched_size;
+};
+
+
 char *test_field[] = {"iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "ip"};
-size_t test_field_size = 4;
+size_t test_field_size = 5;
 
 // main functions
 int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size); 
@@ -52,6 +59,13 @@ void element_converter_cleanup(struct elm_convert *ptr,size_t elm_list_size);
 struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id);
 void elm_id_remove(struct elm_id *arr);
 void *struct_create(int struct_size, int num_of);
+struct str_arr * str_arr_create();
+int str_arr_add(struct str_arr, char *buffer);
+void str_arr_destroy(struct str_arr);
+
+
+
+
 
 int 
 ipx_plugin_init(         // Constructor
@@ -114,6 +128,8 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 	struct ipx_ipfix_record *ipfix_rec;
 	struct fds_drec_field result;
 
+	struct str_arr str;
+
 	char buffer[BUFF_SIZE] = {};
 	int cnt;
 	int ret;
@@ -128,18 +144,33 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 		
 		for (int x = 0; x < inst_ctx->elm_inst_arr_size; x++){ //iterate through every entry in main elm_convert
 			//add a const variable to simplify the madness bellow
+						
+			str.matched = malloc(sizeof(char *) * (inst_ctx->elm_inst_arr[x].elm_arr_size + 1));	
+			if (str.matched == NULL){
+				printf("Memory error\n");
+				return 1; //insert some fancy error code here
+			}
+			str.matched_size = 0;
+
 			for (int y = 0; y < inst_ctx->elm_inst_arr[x].elm_arr_size; y++){ //iterate through every entry in sub elm_arr
-																			  //
 				ret = fds_drec_find(&ipfix_rec->rec, inst_ctx->elm_inst_arr[x].elm_arr[y].pen, inst_ctx->elm_inst_arr[x].elm_arr[y].id, &result);
 				if(ret > 0){
-
 					ret = fds_field2str_be(result.data, result.size, result.info->def->data_type, buffer, BUFF_SIZE);
-					if (ret > 0){
-						printf("%s:%s\n", inst_ctx->elm_inst_arr[x].name, buffer);
-					}
-
+					str.matched[str.matched_size] = malloc(sizeof(char) * BUFF_SIZE);
+					strcpy(str.matched[str.matched_size], buffer);
+					str.matched_size++;
 				}
 			}
+			
+			if (str.matched_size > 0){
+				printf("%s:", inst_ctx->elm_inst_arr[x].name);
+				for (int z = 0; z < str.matched_size; z++){
+					printf(" %s ", str.matched[z]);	
+				}
+				printf("\n");
+			}
+
+			free(str.matched);
 		}
 		printf("-------------------------------------------------\n");
 	}
