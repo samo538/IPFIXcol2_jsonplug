@@ -1,7 +1,5 @@
 //
 #include <ipfixcol2.h>
-#include <ipfixcol2/api.h>
-#include <ipfixcol2/plugins.h>
 #include <libfds/drec.h>
 #include <libfds/iemgr.h>
 #include <stdio.h>
@@ -27,6 +25,10 @@ IPX_API struct ipx_plugin_info ipx_plugin_info = {
     .ipx_min = "2.0.0"
 };
 
+char *param[] = {"iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "ip"};
+
+//********************************STRUCTS************************************
+
 struct elm_id {
 	int pen;
 	int id;
@@ -48,48 +50,46 @@ struct str_arr{
 	size_t matched_size;
 };
 
-// main functions
-int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size); 
-int element_converter_convert();
-void element_converter_cleanup(struct elm_convert *ptr,size_t elm_list_size);
+//********************************FUNCTION DECLARATIONS************************************
 
-//helper functions
+// main init functions
+int element_converter_init(struct instance *inst_ctx, char **params_arr, size_t params_arr_size, const fds_iemgr_t *iemgr); 
+// init helper functions
+int parse_elem(struct elm_convert *convert_arr, char *element , const fds_iemgr_t *iemgr);
+int parse_alias(struct elm_convert *convert_arr, char *element , const fds_iemgr_t *iemgr);
+
+//TODO main convertor function
+int element_converter_convert();
+
+// main cleanup finction
+void element_converter_cleanup(struct instance *inst_ctx);
+
+// othen helper functions
 struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id);
 void *struct_create(int struct_size, int num_of);
 
-char *test_field[] = {"iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "ip", "asdafas"};
+//********************************PLUGIN MAIN************************************
 
 int 
-ipx_plugin_init(         // Constructor
+ipx_plugin_init(
     ipx_ctx_t *ctx,
     const char *params)
 {
-	//printf("Initializing json_proto\n"); 
-
 	const fds_iemgr_t *iemgr; 
 	iemgr = ipx_ctx_iemgr_get(ctx);
 
-	int param_size = sizeof(test_field) / sizeof(char *); 
+	size_t param_size = sizeof(param) / sizeof(char *); 
 	int ret;
-
-	struct elm_convert *elm_convert_arr;
-	elm_convert_arr = struct_create(sizeof(struct elm_convert), param_size);
-	if (elm_convert_arr == NULL){
-		return IPX_ERR_DENIED; //input some error code here later
-	}
-
+		
 	struct instance *inst_ctx;
 	inst_ctx = struct_create(sizeof(struct instance), 1);
 	if (inst_ctx == NULL){
-		return IPX_ERR_DENIED; //input some error code here later
+		return IPX_ERR_DENIED;
 	}
 
-	inst_ctx->elm_inst_arr = elm_convert_arr;
-	inst_ctx->elm_inst_arr_size = param_size;
-
-	ret = element_converter_init(elm_convert_arr, iemgr, test_field, param_size);
-	if (ret != 0){
-		//TODO memory free
+	ret = element_converter_init(inst_ctx, param, param_size, iemgr);
+	if (ret < 0){
+		element_converter_cleanup(inst_ctx);
 		return IPX_ERR_DENIED;
 	}
 
@@ -99,36 +99,27 @@ ipx_plugin_init(         // Constructor
 }
 
 void
-ipx_plugin_destroy(      // Destructor
+ipx_plugin_destroy(    
     ipx_ctx_t *ctx,
     void *cfg)
 {
-	//printf("Destroying...");
-	
-	//TODO into func
 	struct instance *inst_ctx;
 	inst_ctx = (struct instance *) cfg;
 
-	for (int i = 0; i < inst_ctx->elm_inst_arr_size; i++){
-		free(inst_ctx->elm_inst_arr[i].elm_arr);
-	}
-	free(inst_ctx->elm_inst_arr);
-	//end TODO
+	element_converter_cleanup(inst_ctx);
 
-	free(inst_ctx);
 }
 
 int
-ipx_plugin_process(      // Function processing every IPX packet and extracting ids that are specified
+ipx_plugin_process(   
     ipx_ctx_t *ctx,
     void *cfg,
     ipx_msg_t *msg)
 {	
-	//printf("processing flow...\n");
-
 	struct instance *inst_ctx;
 	inst_ctx = (struct instance *) cfg;
-	
+
+	//TODO Do something with this spagetty	
 	struct ipx_ipfix_record *ipfix_rec;
 	struct fds_drec_field result;
 
@@ -178,60 +169,88 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 		}
 		printf("-------------------------------------------------\n");
 	}
+	//end of TODO
 
     return IPX_OK;
 }
 
+//********************************_INIT MAIN AND HELPER************************************
 
-int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size){
- 	const struct fds_iemgr_elem *found_elem;
-	const struct fds_iemgr_alias *found_alias;
+int element_converter_init(struct instance *inst_ctx, char **params_arr, size_t params_arr_size, const fds_iemgr_t *iemgr){
+	int ret;
 
-	//int tmp = 0; //testing
-	
-
-	for(int i = 0; i < elm_list_size; i++){ //mainloop
-	 	found_elem = fds_iemgr_elem_find_name(iemgr, elm_list[i]);
-		ptr[i].elm_arr = NULL;
-		ptr[i].elm_arr_size = 0;
-
-		if(found_elem != NULL){
-			ptr[i].name = elm_list[i];
-			ptr[i].elm_arr = elm_id_add(ptr[i].elm_arr, 0, found_elem->scope->pen, found_elem->id);
-			ptr[i].elm_arr_size += 1;			
-		}	
-		else{
-			found_alias = fds_iemgr_alias_find(iemgr, elm_list[i]);
-
-		   	if (found_alias != NULL){
-				ptr[i].name = elm_list[i];
-				for (int j = 0; j < found_alias->sources_cnt; j++){
-					ptr[i].elm_arr = elm_id_add(ptr[i].elm_arr, j, found_alias->sources[j]->scope->pen, found_alias->sources[j]->id);
-					ptr[i].elm_arr_size += 1;
-				}
-			}	
-			else{
-				printf("the element \"%s\" is invalid! .. ignoring\n", elm_list[i]);
-				return 1;
-			}
-		}
-
-		//tmp++; //testing
+	struct elm_convert *elm_convert_arr;
+	elm_convert_arr = struct_create(sizeof(struct elm_convert), params_arr_size);
+	if (elm_convert_arr == NULL){
+		return -1; 
 	}
 
-	/*for(int i = 0; i < tmp; i++){ // testing for
-		printf("%s\n", ptr[i].name);
-		printf("%zu\n", ptr[i].elm_arr_size);
+	inst_ctx->elm_inst_arr = elm_convert_arr;
+	inst_ctx->elm_inst_arr_size = params_arr_size;
 
-		for (int j = 0; j < ptr[i].elm_arr_size; j++){
-			printf("Id: %d\n", ptr[i].elm_arr[j].id);
-			printf("Pen: %d\n",ptr[i].elm_arr[j].pen);
+	for(int i = 0; i < inst_ctx->elm_inst_arr_size; i++){ //mainloop
+		ret = parse_elem(&inst_ctx->elm_inst_arr[i], params_arr[i], iemgr);
+		if (ret < 0){
+			ret = parse_alias(&inst_ctx->elm_inst_arr[i], params_arr[i], iemgr);
+			if (ret < 0){
+				printf("the element \"%s\" is invalid!\n", params_arr[i]);
+				return -1;
+			}
 		}
-	} // end of testing for*/
-
+	}
 	return 0;
 }
 
+int parse_elem(struct elm_convert *convert_arr, char *element , const fds_iemgr_t *iemgr){
+ 	const struct fds_iemgr_elem *found_elem;
+	found_elem = fds_iemgr_elem_find_name(iemgr, element);
+	convert_arr->elm_arr = NULL;
+	convert_arr->elm_arr_size = 0;
+
+	if(found_elem != NULL){
+		convert_arr->name = element;
+		convert_arr->elm_arr = elm_id_add(convert_arr->elm_arr, 0, found_elem->scope->pen, found_elem->id);
+		convert_arr->elm_arr_size += 1;		
+		return 0;	
+	}	
+	return -1;
+}
+
+int parse_alias(struct elm_convert *convert_arr, char *element , const fds_iemgr_t *iemgr){
+	const struct fds_iemgr_alias *found_alias;
+	found_alias = fds_iemgr_alias_find(iemgr, element);
+	convert_arr->elm_arr = NULL;
+	convert_arr->elm_arr_size = 0;
+
+	if (found_alias != NULL){
+		convert_arr->name = element;
+		for (int j = 0; j < found_alias->sources_cnt; j++){
+			convert_arr->elm_arr = elm_id_add(convert_arr->elm_arr, j, found_alias->sources[j]->scope->pen, found_alias->sources[j]->id);
+			convert_arr->elm_arr_size += 1;
+		}
+		return 0;
+	}	
+	return -1;
+}
+
+//********************************_CLEANUP MAIN************************************
+
+void element_converter_cleanup(struct instance *inst_ctx){
+	for (int i = 0; i < inst_ctx->elm_inst_arr_size; i++){
+		free(inst_ctx->elm_inst_arr[i].elm_arr);
+	}
+	free(inst_ctx->elm_inst_arr);
+	free(inst_ctx);
+}
+
+
+//********************************_CONVERT MAIN AND HELPER************************************
+
+
+
+
+
+//********************************OTHER HELPER************************************
 
 struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id){
 	int num = position + 1;
@@ -255,3 +274,5 @@ void *struct_create(int struct_size, int num_of){
 	}
 	return ptr;
 }
+
+
