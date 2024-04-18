@@ -1,9 +1,13 @@
 //
 #include <ipfixcol2.h>
+#include <libfds/drec.h>
 #include <libfds/iemgr.h>
 #include <stdio.h>
 #include <stdlib.h>
 //
+
+#define BUFF_SIZE 64
+
 /** Plugin description */
 IPX_API struct ipx_plugin_info ipx_plugin_info = {
     // Plugin type
@@ -32,21 +36,22 @@ struct elm_convert{
 };
 
 struct instance{
-	struct elm_convert* elms_arr;
-	size_t elms_arr_size;
+	struct elm_convert* elm_inst_arr;
+	size_t elm_inst_arr_size;
 };
 
-char *test_field[] = {"iana:protocolIdentifier", "iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "srcip"};
-size_t test_field_size = 6;
+char *test_field[] = {"iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "ip"};
+size_t test_field_size = 4;
 
 // main functions
-int element_converter_init(struct elm_convert *ptr, fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size); 
+int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size); 
 int element_converter_convert();
 void element_converter_cleanup(struct elm_convert *ptr,size_t elm_list_size);
 
 //helper functions
 struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id);
 void elm_id_remove(struct elm_id *arr);
+void *struct_create(int struct_size, int num_of);
 
 int 
 ipx_plugin_init(         // Constructor
@@ -55,19 +60,25 @@ ipx_plugin_init(         // Constructor
 {
 	printf("Initializing json_proto\n"); 
 
-	fds_iemgr_t *iemgr; // const paradox 
+	const fds_iemgr_t *iemgr; // const paradox 
 	iemgr = ipx_ctx_iemgr_get(ctx);
 
- 	struct elm_convert elm_convert_arr[test_field_size];
+ 	//struct elm_convert elm_convert_arr[test_field_size];
+
+	struct elm_convert *elm_convert_arr;
+	elm_convert_arr = struct_create(sizeof(struct elm_convert), test_field_size);
+	if (elm_convert_arr == NULL){
+		return 1; //input some error code here later
+	}
 
 	struct instance *inst_ctx;
-	inst_ctx = malloc(sizeof(struct instance));
+	inst_ctx = struct_create(sizeof(struct instance), 1);
 	if (inst_ctx == NULL){
-		printf("Memory error\n");
-		return 1;
+		return 1; //input some error code here later
 	}
-	inst_ctx->elms_arr = elm_convert_arr;
-	inst_ctx->elms_arr_size = test_field_size;
+
+	inst_ctx->elm_inst_arr = elm_convert_arr;
+	inst_ctx->elm_inst_arr_size = test_field_size;
 
 	element_converter_init(elm_convert_arr, iemgr, test_field, test_field_size);
 	
@@ -82,6 +93,9 @@ ipx_plugin_destroy(      // Destructor
     void *cfg)
 {
 	struct instance *inst_ctx;
+
+	//first, test the elm_convert_arr in plugin_process
+
 	/*inst_ctx = (struct instance *) cfg;
 	for (int i = 0; i < inst_ctx->elms_arr_size; i++){
 		
@@ -93,17 +107,48 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
     ipx_ctx_t *ctx,
     void *cfg,
     ipx_msg_t *msg)
-{
+{	
+	struct instance *inst_ctx;
+	inst_ctx = (struct instance *) cfg;
+	
+	struct ipx_ipfix_record *ipfix_rec;
+	struct fds_drec_field result;
+
+	char buffer[BUFF_SIZE] = {};
+	int cnt;
+	int ret;
+
 	printf("processing flow...\n");
 
-	struct instance *inst_ctx;
+	ipx_msg_ipfix_t* ipfix_msg = ipx_msg_base2ipfix(msg);
+	cnt =  ipx_msg_ipfix_get_drec_cnt(ipfix_msg);
 
+	for (int i = 0; i < cnt; i++){
+		ipfix_rec = ipx_msg_ipfix_get_drec(ipfix_msg, i);
+		
+		for (int x = 0; x < inst_ctx->elm_inst_arr_size; x++){ //iterate through every entry in main elm_convert
+			//add a const variable to simplify the madness bellow
+			for (int y = 0; y < inst_ctx->elm_inst_arr[x].elm_arr_size; y++){ //iterate through every entry in sub elm_arr
+																			  //
+				ret = fds_drec_find(&ipfix_rec->rec, inst_ctx->elm_inst_arr[x].elm_arr[y].pen, inst_ctx->elm_inst_arr[x].elm_arr[y].id, &result);
+				if(ret > 0){
+
+					ret = fds_field2str_be(result.data, result.size, result.info->def->data_type, buffer, BUFF_SIZE);
+					if (ret > 0){
+						printf("%s:%s\n", inst_ctx->elm_inst_arr[x].name, buffer);
+					}
+
+				}
+			}
+		}
+		printf("-------------------------------------------------\n");
+	}
 
     return IPX_OK;
 }
 
 
-int element_converter_init(struct elm_convert *ptr, fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size){
+int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size){
  	const struct fds_iemgr_elem *found_elem;
 	const struct fds_iemgr_alias *found_alias;
 
@@ -121,8 +166,6 @@ int element_converter_init(struct elm_convert *ptr, fds_iemgr_t *iemgr, char **e
 			ptr[i].elm_arr_size += 1;			
 		}	
 		else{
-			printf("Not Found!, maybe aliased, finding alias...\n");
-
 			found_alias = fds_iemgr_alias_find(iemgr, elm_list[i]);
 
 		   	if (found_alias != NULL){
@@ -164,6 +207,18 @@ struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id){
 	return arr;
 }
 
-void elm_id_remove(struct elm_id *arr){
+void elm_id_remove(struct elm_id *arr){ //maybe uprage so it takes the whole struct as its parameter
 	free(arr);
+}
+
+
+
+void *struct_create(int struct_size, int num_of){
+	void *ptr;
+	ptr = malloc(struct_size * num_of);
+	if (ptr == NULL){
+		printf("Memory error\n");
+		return NULL; //input some error code here later
+	}
+	return ptr;
 }
