@@ -57,11 +57,7 @@ void element_converter_cleanup(struct elm_convert *ptr,size_t elm_list_size);
 
 //helper functions
 struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id);
-void elm_id_remove(struct elm_id *arr);
 void *struct_create(int struct_size, int num_of);
-struct str_arr * str_arr_create();
-int str_arr_add(struct str_arr, char *buffer);
-void str_arr_destroy(struct str_arr);
 
 
 
@@ -107,13 +103,15 @@ ipx_plugin_destroy(      // Destructor
     void *cfg)
 {
 	struct instance *inst_ctx;
+	inst_ctx = (struct instance *) cfg;
 
-	//first, test the elm_convert_arr in plugin_process
+	printf("Destroying...");
 
-	/*inst_ctx = (struct instance *) cfg;
-	for (int i = 0; i < inst_ctx->elms_arr_size; i++){
-		
-	}	*/
+	for (int i = 0; i < inst_ctx->elm_inst_arr_size; i++){
+		free(inst_ctx->elm_inst_arr[i].elm_arr);
+	}
+	free(inst_ctx->elm_inst_arr);	
+	free(inst_ctx);
 }
 
 int
@@ -166,10 +164,10 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 				printf("%s:", inst_ctx->elm_inst_arr[x].name);
 				for (int z = 0; z < str.matched_size; z++){
 					printf(" %s ", str.matched[z]);	
+					free(str.matched[z]);
 				}
 				printf("\n");
 			}
-
 			free(str.matched);
 		}
 		printf("-------------------------------------------------\n");
@@ -237,12 +235,6 @@ struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id){
 	arr[position].pen = pen;
 	return arr;
 }
-
-void elm_id_remove(struct elm_id *arr){ //maybe uprage so it takes the whole struct as its parameter
-	free(arr);
-}
-
-
 
 void *struct_create(int struct_size, int num_of){
 	void *ptr;
