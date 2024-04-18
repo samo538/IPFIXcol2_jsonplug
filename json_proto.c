@@ -1,5 +1,7 @@
 //
 #include <ipfixcol2.h>
+#include <ipfixcol2/api.h>
+#include <ipfixcol2/plugins.h>
 #include <libfds/drec.h>
 #include <libfds/iemgr.h>
 #include <stdio.h>
@@ -46,10 +48,6 @@ struct str_arr{
 	size_t matched_size;
 };
 
-
-char *test_field[] = {"iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "ip"};
-size_t test_field_size = 5;
-
 // main functions
 int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, char **elm_list, size_t elm_list_size); 
 int element_converter_convert();
@@ -59,39 +57,42 @@ void element_converter_cleanup(struct elm_convert *ptr,size_t elm_list_size);
 struct elm_id *elm_id_add(struct elm_id *arr, int position, int pen, int id);
 void *struct_create(int struct_size, int num_of);
 
-
-
-
+char *test_field[] = {"iana:sourceIPv4Address", "iana:destinationIPv4Address", "iana:destinationTransportPort", "iana:sourceTransportPort", "ip", "asdafas"};
 
 int 
 ipx_plugin_init(         // Constructor
     ipx_ctx_t *ctx,
     const char *params)
 {
-	printf("Initializing json_proto\n"); 
+	//printf("Initializing json_proto\n"); 
 
-	const fds_iemgr_t *iemgr; // const paradox 
+	const fds_iemgr_t *iemgr; 
 	iemgr = ipx_ctx_iemgr_get(ctx);
 
- 	//struct elm_convert elm_convert_arr[test_field_size];
+	int param_size = sizeof(test_field) / sizeof(char *); 
+	int ret;
 
 	struct elm_convert *elm_convert_arr;
-	elm_convert_arr = struct_create(sizeof(struct elm_convert), test_field_size);
+	elm_convert_arr = struct_create(sizeof(struct elm_convert), param_size);
 	if (elm_convert_arr == NULL){
-		return 1; //input some error code here later
+		return IPX_ERR_DENIED; //input some error code here later
 	}
 
 	struct instance *inst_ctx;
 	inst_ctx = struct_create(sizeof(struct instance), 1);
 	if (inst_ctx == NULL){
-		return 1; //input some error code here later
+		return IPX_ERR_DENIED; //input some error code here later
 	}
 
 	inst_ctx->elm_inst_arr = elm_convert_arr;
-	inst_ctx->elm_inst_arr_size = test_field_size;
+	inst_ctx->elm_inst_arr_size = param_size;
 
-	element_converter_init(elm_convert_arr, iemgr, test_field, test_field_size);
-	
+	ret = element_converter_init(elm_convert_arr, iemgr, test_field, param_size);
+	if (ret != 0){
+		//TODO memory free
+		return IPX_ERR_DENIED;
+	}
+
 	ipx_ctx_private_set(ctx, inst_ctx);
 
     return IPX_OK;
@@ -102,15 +103,18 @@ ipx_plugin_destroy(      // Destructor
     ipx_ctx_t *ctx,
     void *cfg)
 {
+	//printf("Destroying...");
+	
+	//TODO into func
 	struct instance *inst_ctx;
 	inst_ctx = (struct instance *) cfg;
-
-	printf("Destroying...");
 
 	for (int i = 0; i < inst_ctx->elm_inst_arr_size; i++){
 		free(inst_ctx->elm_inst_arr[i].elm_arr);
 	}
-	free(inst_ctx->elm_inst_arr);	
+	free(inst_ctx->elm_inst_arr);
+	//end TODO
+
 	free(inst_ctx);
 }
 
@@ -120,6 +124,8 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
     void *cfg,
     ipx_msg_t *msg)
 {	
+	//printf("processing flow...\n");
+
 	struct instance *inst_ctx;
 	inst_ctx = (struct instance *) cfg;
 	
@@ -128,11 +134,10 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 
 	struct str_arr str;
 
+	struct elm_convert smp;
 	char buffer[BUFF_SIZE] = {};
 	int cnt;
 	int ret;
-
-	printf("processing flow...\n");
 
 	ipx_msg_ipfix_t* ipfix_msg = ipx_msg_base2ipfix(msg);
 	cnt =  ipx_msg_ipfix_get_drec_cnt(ipfix_msg);
@@ -141,17 +146,18 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 		ipfix_rec = ipx_msg_ipfix_get_drec(ipfix_msg, i);
 		
 		for (int x = 0; x < inst_ctx->elm_inst_arr_size; x++){ //iterate through every entry in main elm_convert
-			//add a const variable to simplify the madness bellow
-						
-			str.matched = malloc(sizeof(char *) * (inst_ctx->elm_inst_arr[x].elm_arr_size + 1));	
+															   
+			smp = inst_ctx->elm_inst_arr[x]; //simplifing the path to wanted variables
+
+			str.matched = malloc(sizeof(char *) * (smp.elm_arr_size + 1));	
 			if (str.matched == NULL){
 				printf("Memory error\n");
 				return 1; //insert some fancy error code here
 			}
 			str.matched_size = 0;
 
-			for (int y = 0; y < inst_ctx->elm_inst_arr[x].elm_arr_size; y++){ //iterate through every entry in sub elm_arr
-				ret = fds_drec_find(&ipfix_rec->rec, inst_ctx->elm_inst_arr[x].elm_arr[y].pen, inst_ctx->elm_inst_arr[x].elm_arr[y].id, &result);
+			for (int y = 0; y < smp.elm_arr_size; y++){ //iterate through every entry in sub elm_arr
+				ret = fds_drec_find(&ipfix_rec->rec, smp.elm_arr[y].pen, smp.elm_arr[y].id, &result);
 				if(ret > 0){
 					ret = fds_field2str_be(result.data, result.size, result.info->def->data_type, buffer, BUFF_SIZE);
 					str.matched[str.matched_size] = malloc(sizeof(char) * BUFF_SIZE);
@@ -161,9 +167,9 @@ ipx_plugin_process(      // Function processing every IPX packet and extracting 
 			}
 			
 			if (str.matched_size > 0){
-				printf("%s:", inst_ctx->elm_inst_arr[x].name);
+				printf("%s:", smp.name);
 				for (int z = 0; z < str.matched_size; z++){
-					printf(" %s ", str.matched[z]);	
+					printf("%s ", str.matched[z]);	
 					free(str.matched[z]);
 				}
 				printf("\n");
@@ -181,7 +187,7 @@ int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, ch
  	const struct fds_iemgr_elem *found_elem;
 	const struct fds_iemgr_alias *found_alias;
 
-	int tmp = 0; //testing
+	//int tmp = 0; //testing
 	
 
 	for(int i = 0; i < elm_list_size; i++){ //mainloop
@@ -204,12 +210,16 @@ int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, ch
 					ptr[i].elm_arr_size += 1;
 				}
 			}	
+			else{
+				printf("the element \"%s\" is invalid! .. ignoring\n", elm_list[i]);
+				return 1;
+			}
 		}
 
-		tmp++; //testing
+		//tmp++; //testing
 	}
 
-	for(int i = 0; i < tmp; i++){ // testing for
+	/*for(int i = 0; i < tmp; i++){ // testing for
 		printf("%s\n", ptr[i].name);
 		printf("%zu\n", ptr[i].elm_arr_size);
 
@@ -217,7 +227,7 @@ int element_converter_init(struct elm_convert *ptr, const fds_iemgr_t *iemgr, ch
 			printf("Id: %d\n", ptr[i].elm_arr[j].id);
 			printf("Pen: %d\n",ptr[i].elm_arr[j].pen);
 		}
-	} // end of testing for
+	} // end of testing for*/
 
 	return 0;
 }
@@ -241,7 +251,7 @@ void *struct_create(int struct_size, int num_of){
 	ptr = malloc(struct_size * num_of);
 	if (ptr == NULL){
 		printf("Memory error\n");
-		return NULL; //input some error code here later
+		return NULL;
 	}
 	return ptr;
 }
