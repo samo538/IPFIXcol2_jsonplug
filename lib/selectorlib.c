@@ -78,6 +78,10 @@ int fds_selector_find(
 	int ret = 0;
 	int fn_ret = 0;
 	struct fds_drec_field field;
+
+	//TODO put there things into functions
+
+	//if selector->item[index].flag == FIRST
 	for (int i = 0; i < idpen_size; i++){
 		ret = fds_drec_find(drec, idpen[i].pen, idpen[i].id, &field);
 		if (ret >= 0){
@@ -87,6 +91,9 @@ int fds_selector_find(
 			return ret;
 		}
 	}
+	//if selector->item[index].flag == ALL
+	//
+	//init(iterator) here
 
 	return FDS_OK; //TODO some good code	
 }

@@ -27,7 +27,7 @@ IPX_API struct ipx_plugin_info ipx_plugin_info = {
 };
 
 int fn(const struct fds_drec_field *field, void *context){
-	char buffer[65];
+	char buffer[BUFF_SIZE + 1];
 	char *name = (char *)context;
 
 	fds_field2str_be(field->data, field->size, field->info->def->data_type, buffer, BUFF_SIZE);
@@ -41,7 +41,7 @@ ipx_plugin_init(
     const char *params)
 {
 	size_t param_size = 5;
-	fds_selector_field_t *param = malloc(sizeof(fds_selector_field_t) * 5);
+	fds_selector_field_t *param = malloc(sizeof(fds_selector_field_t) * param_size);
 
 	if(param == NULL){
 		return IPX_ERR_DENIED;
