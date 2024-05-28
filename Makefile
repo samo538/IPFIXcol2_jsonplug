@@ -1,9 +1,14 @@
-all: libplugin.so 
-	ipfixcol2 -c config.xml -p libplugin.so
+.PHONY: all debug clear
 
-libplugin.so: json_proto.c lib/selectorlib.c
-	gcc -c json_proto.c lib/selectorlib.c -fPIC
-	gcc json_proto.o selectorlib.o -shared -o libplugin.so
+all: libplugin.so 
+	ipfixcol2 -c xml/config.xml -p libplugin.so
+
+libplugin.so: json_proto.c 
+	gcc -c json_proto.c -fPIC
+	gcc json_proto.o -shared -o libplugin.so
 
 debug: libplugin.so
 	valgrind --show-leak-kinds=all --leak-check=full ipfixcol2 -c config.xml -p libplugin.so
+
+clear: 
+	rm -f *.o *.so

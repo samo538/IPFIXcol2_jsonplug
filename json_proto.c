@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "lib/selectorlib.h"
 //
 
 #define BUFF_SIZE 64
@@ -32,7 +30,7 @@ int fn(const struct fds_drec_field *field, void *context){
 
 	fds_field2str_be(field->data, field->size, field->info->def->data_type, buffer, BUFF_SIZE);
 	printf("%s: %s\n",name, buffer);
-	return 0;
+	return FDS_OK;
 }
 
 int 
@@ -48,13 +46,13 @@ ipx_plugin_init(
 	}
 
 	param[0].name = "iana:sourceIPv4Address";
-	param[0].flag = FDS_SELECTOR_FIRST;
+	param[0].flag = FDS_SELECTOR_ALL;
 	param[1].name = "iana:destinationIPv4Address";
-	param[1].flag = FDS_SELECTOR_FIRST;
+	param[1].flag = FDS_SELECTOR_ALL;
 	param[2].name = "iana:destinationTransportPort";
 	param[2].flag = FDS_SELECTOR_FIRST;
 	param[3].name = "iana:sourceTransportPort";
-	param[3].flag = FDS_SELECTOR_FIRST;
+	param[3].flag = FDS_SELECTOR_ALL;
 	param[4].name = "ip";
 	param[4].flag = FDS_SELECTOR_FIRST;
 
@@ -62,7 +60,7 @@ ipx_plugin_init(
 	const fds_iemgr_t *iemgr; 
 	iemgr = ipx_ctx_iemgr_get(ctx);
 
-    fds_selector_t *selector;
+	fds_selector_t *selector;
 	int ret;
 	selector = fds_selector_create(iemgr);
 	
