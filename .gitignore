@@ -1,3 +1,5 @@
 config.xml
 aliases.xml
 libplugin.so
+selectorlib.o
+json_proto.o
