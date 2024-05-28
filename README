@@ -2,7 +2,7 @@ WORK IN PROGRESS
 
 This plugin is part of: https://github.com/CESNET/ipfixcol2
 
-THIS PLUGIN NOW DEPENDS ON THE LIBFDS LIBRARY!
+THIS PLUGIN NOW DEPENDS ON THE LIBFDS LIBRARY! (https://github.com/CESNET/libfds)
 
 Right now, when you use IPFIXcol2 with the json output plugin, every field of every IPFIX message will be
 parsed into the json output. Sometimes you want parse only some of the fields located in IPFIX massages
